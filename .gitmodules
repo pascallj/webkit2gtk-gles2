@@ -1,0 +1,3 @@
+[submodule "webkit"]
+	path = webkit
+	url = https://salsa.debian.org/webkit-team/webkit.git
