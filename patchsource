@@ -7,9 +7,6 @@ rm webkit/debian/gir*
 rm webkit/debian/*-doc*
 rm webkit/debian/*-dev*
 
-echo "Changing source format to 3.0 (native)..."
-echo "3.0 (native)" > webkit/debian/source/format
-
 echo "Patching control file..."
 sed -i '/gobject-introspection /d ; /libgirepository1.0-dev /d ; /libfile-copy-recursive-perl,/d' webkit/debian/control
 sed -i '/Package: .*-dev/,/^$/d ; /Package: .*-doc/,/^$/d ; /Package: gir.*/,/^$/d' webkit/debian/control
