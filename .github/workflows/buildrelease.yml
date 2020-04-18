@@ -1,0 +1,141 @@
+on:
+  push:
+    branches:
+      - testing
+      
+name: Build packages
+
+jobs:
+  build:
+    name: "Run sbuild"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Build Docker image
+        run: docker build . -t sbuild
+      - name: Run Docker image
+        run: docker run --privileged --workdir /github/workspace -e GITHUB_WORKSPACE -v $GITHUB_WORKSPACE:"/github/workspace" sbuild
+      - name: Identify artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          for f in *; do (echo "$f" | grep -Pq '^libjavascriptcoregtk((?!dbgsym|bin).)*$') && echo "::set-output name=libjavascriptcoregtk::$f" ;  (echo "$f" | grep -Pq '^libjavascriptcoregtk.*bin((?!dbgsym).)*$') && echo "::set-output name=libjavascriptcoregtk-bin::$f" ; (echo "$f" | grep -Pq '^libwebkit2gtk((?!dbgsym).)*$') && echo "::set-output name=libwebkit2gtk::$f" ; [[ $f == webkit2gtk-driver_* ]] && echo "::set-output name=webkit2gtk-driver::$f" ; [[ $f == webkit2gtk_*.build ]] && echo "::set-output name=log::$f" ; continue ; done
+      - name: Upload libjavascriptcoregtk
+        uses: actions/upload-artifact@v1
+        with:
+          name: libjavascriptcoregtk
+          path: ${{ steps.artifacts.outputs.libjavascriptcoregtk }}
+      - name: Upload libjavascriptcoregtk-bin
+        uses: actions/upload-artifact@v1
+        with:
+          name: libjavascriptcoregtk-bin
+          path: ${{ steps.artifacts.outputs.libjavascriptcoregtk-bin }}
+      - name: Upload libwebkit2gtk
+        uses: actions/upload-artifact@v1
+        with:
+          name: libwebkit2gtk
+          path: ${{ steps.artifacts.outputs.libwebkit2gtk }}
+      - name: Upload webkit2gtk-driver
+        uses: actions/upload-artifact@v1
+        with:
+          name: webkit2gtk-driver
+          path: ${{ steps.artifacts.outputs.webkit2gtk-driver }}
+      - name: Upload build log
+        uses: actions/upload-artifact@v1
+        with:
+          name: log
+          path: ${{ steps.artifacts.outputs.log }}
+
+  release:
+    name: Release artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download libjavascriptcoregtk
+        uses: actions/download-artifact@v1
+        with:
+          name: libjavascriptcoregtk
+      - name: Download libjavascriptcoregtk-bin
+        uses: actions/download-artifact@v1
+        with:
+          name: libjavascriptcoregtk-bin
+      - name: Download libwebkit2gtk
+        uses: actions/download-artifact@v1
+        with:
+          name: libwebkit2gtk
+      - name: Download webkit2gtk-driver
+        uses: actions/download-artifact@v1
+        with:
+          name: webkit2gtk-driver
+      - name: Download build log
+        uses: actions/download-artifact@v1
+        with:
+          name: log
+      - name: Identify artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          for file in libjavascriptcoregtk/*; do echo "::set-output name=libjavascriptcoregtk::${file##*/}" ; break 1 ; done
+          for file in libjavascriptcoregtk-bin/*; do echo "::set-output name=libjavascriptcoregtk-bin::${file##*/}" ; break 1 ; done
+          for file in libwebkit2gtk/*; do echo "::set-output name=libwebkit2gtk::${file##*/}" ; break 1 ; done
+          for file in webkit2gtk-driver/*; do echo "::set-output name=webkit2gtk-driver::${file##*/}" ; break 1 ; done
+          for file in log/*; do echo "::set-output name=log::${file##*/}" ; break 1 ; done
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: Built and released by a Github runner...
+          draft: true
+          prerelease: false
+      - name: Upload asset libjavascriptcoregtk
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: libjavascriptcoregtk/${{ steps.artifacts.outputs.libjavascriptcoregtk }}
+          asset_name: ${{ steps.artifacts.outputs.libjavascriptcoregtk }}
+          asset_content_type: "application/vnd.debian.binary-package"
+      - name: Upload asset libjavascriptcoregtk-bin
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: libjavascriptcoregtk-bin/${{ steps.artifacts.outputs.libjavascriptcoregtk-bin }}
+          asset_name: ${{ steps.artifacts.outputs.libjavascriptcoregtk-bin }}
+          asset_content_type: "application/vnd.debian.binary-package"
+      - name: Upload asset libwebkit2gtk
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: libwebkit2gtk/${{ steps.artifacts.outputs.libwebkit2gtk }}
+          asset_name: ${{ steps.artifacts.outputs.libwebkit2gtk }}
+          asset_content_type: "application/vnd.debian.binary-package"
+      - name: Upload asset webkit2gtk-driver
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: webkit2gtk-driver/${{ steps.artifacts.outputs.webkit2gtk-driver }}
+          asset_name: ${{ steps.artifacts.outputs.webkit2gtk-driver }}
+          asset_content_type: "application/vnd.debian.binary-package"
+      - name: Upload asset build log
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: log/${{ steps.artifacts.outputs.log }}
+          asset_name: ${{ steps.artifacts.outputs.log }}
+          asset_content_type: "text/plain"
